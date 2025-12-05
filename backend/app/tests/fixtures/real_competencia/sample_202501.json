@@ -1,0 +1,215 @@
+{
+  "competencia": "202501",
+  "tenant": {
+    "id": 1,
+    "name": "Tenant Teste",
+    "cnpj": "12345678000199"
+  },
+  "unidades": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "nome": "CER Teste",
+      "cnes": "1234567",
+      "cnpj": "12345678000199",
+      "uf": "DF",
+      "ibge_cod": "5300108",
+      "destino": "M",
+      "competencia_params": {}
+    }
+  ],
+  "profissionais": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "unidade_id": 1,
+      "nome": "Dr Resp",
+      "cpf": "12345678901",
+      "cns": "898001160660006",
+      "cbo": "225120",
+      "conselho": "CRM"
+    },
+    {
+      "id": 2,
+      "tenant_id": 1,
+      "unidade_id": 1,
+      "nome": "Fisio Teste",
+      "cpf": "12345678902",
+      "cns": "898001160660007",
+      "cbo": "223605",
+      "conselho": "CREFITO"
+    }
+  ],
+  "pacientes": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "nome": "Paciente Um",
+      "cpf": "11111111111",
+      "cns": "898001160660008",
+      "nome_social": null,
+      "nome_mae": "Mae Um",
+      "sexo": "M",
+      "data_nascimento": "1990-01-01",
+      "ibge_cod": "5300108",
+      "contato": {
+        "logradouro": "Rua A",
+        "numero": "10",
+        "complemento": "",
+        "cep": "70000000",
+        "bairro": "Centro",
+        "ddd": "61",
+        "fone": "999999999",
+        "email": "um@example.com"
+      },
+      "pcd": false,
+      "cid_deficiencia": null
+    },
+    {
+      "id": 2,
+      "tenant_id": 1,
+      "nome": "Paciente Dois",
+      "cpf": "22222222222",
+      "cns": "898001160660009",
+      "nome_social": null,
+      "nome_mae": "Mae Dois",
+      "sexo": "F",
+      "data_nascimento": "1985-05-05",
+      "ibge_cod": "5300108",
+      "contato": {
+        "logradouro": "Rua B",
+        "numero": "20",
+        "complemento": "Ap 2",
+        "cep": "70000001",
+        "bairro": "Centro",
+        "ddd": "61",
+        "fone": "888888888",
+        "email": "dois@example.com"
+      },
+      "pcd": false,
+      "cid_deficiencia": null
+    },
+    {
+      "id": 3,
+      "tenant_id": 1,
+      "nome": "Paciente Tres",
+      "cpf": "33333333333",
+      "cns": "898001160660010",
+      "nome_social": null,
+      "nome_mae": "Mae Tres",
+      "sexo": "M",
+      "data_nascimento": "2000-12-12",
+      "ibge_cod": "5300108",
+      "contato": {
+        "logradouro": "Rua C",
+        "numero": "30",
+        "complemento": "",
+        "cep": "70000002",
+        "bairro": "Centro",
+        "ddd": "61",
+        "fone": "777777777",
+        "email": "tres@example.com"
+      },
+      "pcd": true,
+      "cid_deficiencia": "H919"
+    }
+  ],
+  "atendimentos": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "unidade_id": 1,
+      "profissional_id": 1,
+      "paciente_id": 1,
+      "tipo": "consulta",
+      "data": "2025-01-10T10:00:00",
+      "status": "concluido"
+    },
+    {
+      "id": 2,
+      "tenant_id": 1,
+      "unidade_id": 1,
+      "profissional_id": 2,
+      "paciente_id": 2,
+      "tipo": "terapia",
+      "data": "2025-01-12T14:00:00",
+      "status": "concluido"
+    },
+    {
+      "id": 3,
+      "tenant_id": 1,
+      "unidade_id": 1,
+      "profissional_id": 1,
+      "paciente_id": 3,
+      "tipo": "avaliacao",
+      "data": "2025-01-15T09:00:00",
+      "status": "concluido"
+    }
+  ],
+  "tabelas_sigtap": [
+    {
+      "codigo": "0301010030",
+      "descricao": "Consulta medica",
+      "valor": 10.0,
+      "regras": {},
+      "vigencia": "202501",
+      "exige_cid": false,
+      "exige_apac": false,
+      "doc_paciente": "CNS",
+      "sexo_permitido": "A",
+      "idade_min": null,
+      "idade_max": null
+    },
+    {
+      "codigo": "0202010030",
+      "descricao": "Procedimento APAC",
+      "valor": 100.0,
+      "regras": {},
+      "vigencia": "202501",
+      "exige_cid": true,
+      "exige_apac": true,
+      "doc_paciente": "CNS",
+      "sexo_permitido": "A",
+      "idade_min": null,
+      "idade_max": null
+    }
+  ],
+  "procedimentos": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "atendimento_id": 1,
+      "sigtap_codigo": "0301010030",
+      "cid10": "F329",
+      "quantidade": 1,
+      "profissional_cbo": "225120",
+      "valores": { "valor": 10.0 },
+      "competencia_aaaamm": "202501",
+      "validacoes_json": {}
+    },
+    {
+      "id": 2,
+      "tenant_id": 1,
+      "atendimento_id": 2,
+      "sigtap_codigo": "0301010030",
+      "cid10": "F329",
+      "quantidade": 2,
+      "profissional_cbo": "223605",
+      "valores": { "valor": 20.0 },
+      "competencia_aaaamm": "202501",
+      "validacoes_json": {}
+    },
+    {
+      "id": 3,
+      "tenant_id": 1,
+      "atendimento_id": 3,
+      "sigtap_codigo": "0202010030",
+      "cid10": "H919",
+      "quantidade": 1,
+      "profissional_cbo": "225120",
+      "valores": { "valor": 100.0 },
+      "competencia_aaaamm": "202501",
+      "validacoes_json": {}
+    }
+  ]
+}

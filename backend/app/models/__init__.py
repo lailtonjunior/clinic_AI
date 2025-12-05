@@ -1,0 +1,23 @@
+from app.database import Base
+from app.models.entities import (
+    Tenant,
+    Unidade,
+    Usuario,
+    Profissional,
+    Paciente,
+    Agenda,
+    Atendimento,
+    EvolucaoProntuario,
+    AnexoClinico,
+    ProcedimentoSUS,
+    ExportacaoBPA,
+    ExportacaoAPAC,
+    CompetenciaAberta,
+    TabelaSIGTAP,
+    TabelaAuxiliar,
+    AuditLog,
+    CmdContato,
+    CmdConfigTenant,
+    Role,
+    TenantUserRole,
+)
