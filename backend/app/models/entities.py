@@ -42,6 +42,7 @@ class Usuario(Base):
     nome = Column(String(255), nullable=False)
     hashed_password = Column(String(255), nullable=False)
     mfa_enabled = Column(Boolean, default=False)
+    mfa_secret = Column(String(64), nullable=True)
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

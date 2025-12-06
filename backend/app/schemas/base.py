@@ -136,8 +136,8 @@ class EvolucaoBase(BaseModel):
     tenant_id: int
     atendimento_id: int
     texto_estruturado: str
-    hash_sha256: str
-    assinado: bool
+    hash_sha256: str | None = None
+    assinado: bool = False
     assinatura_meta: Any | None = None
 
 

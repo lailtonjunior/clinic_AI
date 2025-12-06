@@ -1,4 +1,7 @@
 from datetime import timedelta
+from typing import Optional
+
+import pyotp
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -14,6 +17,7 @@ class LoginRequest(BaseModel):
     email: str
     password: str
     tenant_id: int
+    mfa_code: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -30,6 +34,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db_session)):
     user, roles = authenticate_user(db, payload.email, payload.password, payload.tenant_id)
+    if user.mfa_enabled:
+        if not user.mfa_secret:
+            raise HTTPException(status_code=400, detail="MFA habilitado sem secret configurado")
+        totp = pyotp.TOTP(user.mfa_secret)
+        if not payload.mfa_code or not totp.verify(payload.mfa_code):
+            raise HTTPException(status_code=401, detail="Codigo MFA invalido ou ausente")
     token = create_access_token(
         user_id=user.id,
         tenant_id=payload.tenant_id,
@@ -57,3 +67,43 @@ def change_password(
     db.add(current_user)
     db.commit()
     return {"status": "ok"}
+
+
+class MfaSetupResponse(BaseModel):
+    otpauth_uri: str
+
+
+@router.post("/mfa/setup", response_model=MfaSetupResponse)
+def mfa_setup(
+    db: Session = Depends(get_db_session),
+    current_user: models.Usuario = Depends(get_current_user),
+):
+    secret = pyotp.random_base32()
+    current_user.mfa_secret = secret
+    current_user.mfa_enabled = False
+    db.add(current_user)
+    db.commit()
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(name=current_user.email, issuer_name=settings.app_name)
+    return MfaSetupResponse(otpauth_uri=uri)
+
+
+class MfaConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/mfa/confirm")
+def mfa_confirm(
+    payload: MfaConfirmRequest,
+    db: Session = Depends(get_db_session),
+    current_user: models.Usuario = Depends(get_current_user),
+):
+    if not current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="MFA nao inicializado")
+    totp = pyotp.TOTP(current_user.mfa_secret)
+    if not totp.verify(payload.code):
+        raise HTTPException(status_code=400, detail="Codigo MFA invalido")
+    current_user.mfa_enabled = True
+    db.add(current_user)
+    db.commit()
+    return {"status": "ok", "mfa_enabled": True}

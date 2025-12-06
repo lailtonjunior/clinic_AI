@@ -1,11 +1,14 @@
-﻿from datetime import datetime
+﻿from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
+import hashlib
+from pydantic import BaseModel
+
 from app.api.deps import get_db_session
 from app import models
 from app.schemas import base as schemas
@@ -13,6 +16,7 @@ from app.services import sigtap_rules
 from app.services import export_bpa, export_apac
 from app.services import minio_service
 from app.services import audit_log_service
+from app.services.procedimento_validator import ProcedimentoValidatorService
 from app.dependencies import (
     apply_tenant_filter,
     ensure_same_tenant,
@@ -170,6 +174,36 @@ def list_agendas(
     return db.scalars(stmt).all()
 
 
+class AgendaUpdate(BaseModel):
+    data: datetime | None = None
+    status: str | None = None
+    paciente_id: int | None = None
+
+
+@router.put("/agendas/{agenda_id}", response_model=schemas.Agenda)
+def update_agenda(
+    agenda_id: int,
+    payload: AgendaUpdate,
+    db: Session = Depends(get_db_session),
+    current_user: models.Usuario = Depends(require_roles(Role.RECEPCAO.value, Role.CLINICO.value, Role.ADMIN_TENANT.value)),
+    current_tenant_id: int = Depends(get_current_tenant_id),
+):
+    ag = db.get(models.Agenda, agenda_id)
+    if not ag or ag.tenant_id != current_tenant_id:
+        raise HTTPException(status_code=404, detail="Agenda nao encontrada")
+    if payload.data:
+        ag.data = payload.data
+    if payload.status:
+        ag.status = payload.status
+    if payload.paciente_id is not None:
+        ag.paciente_id = payload.paciente_id
+    db.add(ag)
+    db.commit()
+    db.refresh(ag)
+    audit_log_service.log_action(db, current_tenant_id, current_user.id, "ATUALIZAR_AGENDA", "Agenda", ag.id)
+    return ag
+
+
 @router.post("/atendimentos", response_model=schemas.Atendimento)
 def create_atendimento(
     payload: schemas.AtendimentoCreate,
@@ -212,6 +246,10 @@ def create_evolucao(
     atendimento = db.get(models.Atendimento, data["atendimento_id"])
     if not atendimento or atendimento.tenant_id != current_tenant_id:
         raise HTTPException(status_code=403, detail="Atendimento de outro tenant")
+    # Backend is responsible for hashing/assinatura; front envia apenas texto.
+    if not data.get("hash_sha256"):
+        data["hash_sha256"] = hashlib.sha256(data["texto_estruturado"].encode("utf-8")).hexdigest()
+    data["assinado"] = data.get("assinado", False)
     evo = models.EvolucaoProntuario(**data)
     obj = _commit_and_refresh(db, evo)
     audit_log_service.log_action(db, current_tenant_id, current_user.id, "CRIAR_EVOLUCAO", "EvolucaoProntuario", obj.id)
@@ -247,10 +285,11 @@ def create_procedimento(
     data = payload.model_dump()
     data["tenant_id"] = current_tenant_id
     proc = models.ProcedimentoSUS(**data)
-    tabela_proc = sigtap_rules.get_tabela_para_competencia(db, payload.sigtap_codigo, proc.competencia_aaaamm)
-    erros = sigtap_rules.validate_procedimento(db, paciente, proc, unidade, profissional, data_at, tabela_proc=tabela_proc)
-    if erros:
-        raise HTTPException(status_code=400, detail={"erros": erros})
+    validator = ProcedimentoValidatorService(db)
+    resultado_validacao = validator.validar_procedimento(proc)
+    proc.validacoes_json = resultado_validacao
+    if resultado_validacao.get("erros"):
+        raise HTTPException(status_code=400, detail={"erros": resultado_validacao["erros"]})
     obj = _commit_and_refresh(db, proc)
     audit_log_service.log_action(db, current_tenant_id, current_user.id, "CRIAR_PROCEDIMENTO", "ProcedimentoSUS", obj.id)
     return obj
@@ -314,6 +353,84 @@ def audit_competencia(
 
 def _garante_dir(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+@router.get("/core/dashboard")
+def dashboard(
+    db: Session = Depends(get_db_session),
+    current_user: models.Usuario = Depends(get_current_user),
+    current_tenant_id: int = Depends(get_current_tenant_id),
+):
+    today = datetime.utcnow()
+    competencia = today.strftime("%Y%m")
+    start_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_month = (start_month + timedelta(days=32)).replace(day=1)
+
+    total_atendimentos = db.scalar(
+        select(func.count()).where(
+            models.Atendimento.tenant_id == current_tenant_id,
+            models.Atendimento.data >= start_month,
+            models.Atendimento.data < next_month,
+        )
+    ) or 0
+
+    total_pacientes = db.scalar(
+        select(func.count(func.distinct(models.Atendimento.paciente_id))).where(
+            models.Atendimento.tenant_id == current_tenant_id,
+            models.Atendimento.data >= start_month,
+            models.Atendimento.data < next_month,
+        )
+    ) or 0
+
+    total_procedimentos = db.scalar(
+        select(func.count()).where(
+            models.ProcedimentoSUS.tenant_id == current_tenant_id,
+            models.ProcedimentoSUS.competencia_aaaamm == competencia,
+        )
+    ) or 0
+
+    ok_field = models.ProcedimentoSUS.validacoes_json["ok"].as_boolean()
+    total_procedimentos_com_erro = db.scalar(
+        select(func.count()).where(
+            models.ProcedimentoSUS.tenant_id == current_tenant_id,
+            models.ProcedimentoSUS.competencia_aaaamm == competencia,
+            ok_field.is_(False),
+        )
+    ) or 0
+
+    exp_bpa = db.scalars(
+        select(models.ExportacaoBPA)
+        .where(models.ExportacaoBPA.tenant_id == current_tenant_id)
+        .order_by(models.ExportacaoBPA.id.desc())
+        .limit(3)
+    ).all()
+    exp_apac = db.scalars(
+        select(models.ExportacaoAPAC)
+        .where(models.ExportacaoAPAC.tenant_id == current_tenant_id)
+        .order_by(models.ExportacaoAPAC.id.desc())
+        .limit(3)
+    ).all()
+
+    def _map_exp(exp):
+        return {
+            "id": exp.id,
+            "tipo": "BPA" if isinstance(exp, models.ExportacaoBPA) else "APAC",
+            "competencia": exp.competencia,
+            "status": exp.status,
+            "data": getattr(exp, "created_at", None),
+            "erros": exp.erros_json or {},
+        }
+
+    ultimas_exportacoes = [_map_exp(e) for e in (exp_bpa + exp_apac)]
+
+    return {
+        "competencia": competencia,
+        "total_atendimentos": total_atendimentos,
+        "total_pacientes": total_pacientes,
+        "total_procedimentos": total_procedimentos,
+        "total_procedimentos_com_erro": total_procedimentos_com_erro,
+        "ultimas_exportacoes": ultimas_exportacoes,
+    }
 
 
 @router.api_route("/exports/bpa", methods=["GET", "POST"])
@@ -522,4 +639,9 @@ def export_apac_endpoint(
 
     filename = f"APAC_{competencia}.rem"
     return _build_download_response(conteudo, filename)
+
+
+
+
+
 
