@@ -2,7 +2,6 @@ from celery import Celery
 
 from app.core.config import settings
 
-# Celery application configured to use Redis for broker/result backend.
 celery_app = Celery(
     "clinic_ai",
     broker=settings.redis_url,

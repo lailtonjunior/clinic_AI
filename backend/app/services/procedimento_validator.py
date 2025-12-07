@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -8,17 +8,21 @@ from app.services import sigtap_rules
 
 
 class ProcedimentoValidatorService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _get_context(self, procedimento: models.ProcedimentoSUS):
+    def _get_context(
+        self, procedimento: models.ProcedimentoSUS
+    ) -> Tuple[models.Atendimento | None, models.Paciente | None, models.Profissional | None, models.Unidade | None, Any]:
         atendimento = self.db.get(models.Atendimento, procedimento.atendimento_id)
         paciente = self.db.get(models.Paciente, atendimento.paciente_id) if atendimento else None
         profissional = self.db.get(models.Profissional, atendimento.profissional_id) if atendimento else None
         unidade = self.db.get(models.Unidade, atendimento.unidade_id) if atendimento else None
-        data_atendimento = (
-            atendimento.data.date() if atendimento and isinstance(atendimento.data, datetime) else atendimento.data if atendimento else None
-        )
+        data_atendimento = None
+        if atendimento:
+            data_atendimento = (
+                atendimento.data.date() if isinstance(atendimento.data, datetime) else atendimento.data
+            )
         return atendimento, paciente, profissional, unidade, data_atendimento
 
     def validar_procedimento(self, procedimento: models.ProcedimentoSUS) -> Dict[str, Any]:

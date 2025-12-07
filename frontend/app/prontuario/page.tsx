@@ -1,15 +1,16 @@
 ﻿"use client";
+
 import { useEffect, useMemo, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+
+import { AssistantChat } from "../../components/clinical/AssistantChat";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { useNotifications } from "../../components/ui/notifications";
 import { createEvolucao, getAtendimentos, getEvolucoes } from "../../lib/api";
 import { getSession } from "../../lib/auth";
-import { AssistantChat } from "../../components/clinical/AssistantChat";
 
-// Tiptap é apenas UI rica; responsabilidade clínica permanece com o profissional.
 export default function ProntuarioPage() {
   const { notifyError, notifySuccess } = useNotifications();
   const [atendimentos, setAtendimentos] = useState<any[]>([]);
@@ -20,7 +21,7 @@ export default function ProntuarioPage() {
   const editor = useEditor({ extensions: [StarterKit], content: "<p>Registrar evolução clínica...</p>" });
 
   useEffect(() => {
-    async function load() {
+    async function loadAtendimentos() {
       try {
         const ats = await getAtendimentos();
         setAtendimentos(ats);
@@ -31,7 +32,7 @@ export default function ProntuarioPage() {
         setLoading(false);
       }
     }
-    load();
+    loadAtendimentos();
   }, [notifyError]);
 
   useEffect(() => {
@@ -98,14 +99,20 @@ export default function ProntuarioPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <div className="flex flex-wrap gap-2 text-sm">
-            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleBold().run()}>Negrito</Button>
-            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleItalic().run()}>Itálico</Button>
-            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleBulletList().run()}>Lista</Button>
+            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleBold().run()}>
+              Negrito
+            </Button>
+            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleItalic().run()}>
+              Itálico
+            </Button>
+            <Button variant="secondary" onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+              Lista
+            </Button>
             <Button variant="secondary" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
               Título
             </Button>
           </div>
-          <div className="rounded border border-slate-800 bg-slate-950 p-3 min-h-[240px]">
+          <div className="min-h-[240px] rounded border border-slate-800 bg-slate-950 p-3">
             <EditorContent editor={editor} />
           </div>
           <Button onClick={handleSalvar} disabled={!selectedAtendimento || loading}>
@@ -116,7 +123,7 @@ export default function ProntuarioPage() {
         <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <h2 className="text-lg font-semibold">Histórico</h2>
           {evolucoesSelecionadas.length === 0 && <p className="text-sm text-slate-400">Nenhuma evolução ainda.</p>}
-          <div className="space-y-3 max-h-[420px] overflow-auto">
+          <div className="max-h-[420px] space-y-3 overflow-auto">
             {evolucoesSelecionadas.map((ev) => (
               <div key={ev.id} className="rounded border border-slate-800 bg-slate-950 p-3 text-sm">
                 <div className="mb-1 flex items-center justify-between text-xs text-slate-400">

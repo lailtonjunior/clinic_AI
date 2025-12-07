@@ -1,11 +1,12 @@
 "use client";
+
 import { HTMLAttributes } from "react";
+
+type Variant = "default" | "success" | "warning" | "danger";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-
-type Variant = "default" | "success" | "warning" | "danger";
 
 const variantClasses: Record<Variant, string> = {
   default: "bg-slate-800 text-slate-100",

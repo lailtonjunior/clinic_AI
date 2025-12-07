@@ -1,7 +1,9 @@
-"use client";
+﻿"use client";
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+
 import { clearSession, getSession, hasRole, isAuthenticated, Session } from "../lib/auth";
 import { NotificationsProvider } from "./ui/notifications";
 
@@ -16,35 +18,43 @@ export function AppShell({ children }: Props) {
     const sess = getSession();
     setSession(sess);
     if (!isAuthenticated() && pathname !== "/login") {
-        router.push("/login");
+      router.push("/login");
     }
     if (sess && pathname === "/login") {
-        router.push("/producao");
+      router.push("/dashboard");
     }
   }, [pathname, router]);
 
+  const showRecepcao = hasRole(session, ["RECEPCAO", "ADMIN_TENANT"]);
+  const showClinico = hasRole(session, ["CLINICO", "ADMIN_TENANT"]);
   const showFaturamento = hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN"]);
   const showAuditoria = hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN", "AUDITOR_INTERNO"]);
-  const showClinico = hasRole(session, ["CLINICO", "ADMIN_TENANT"]);
-  const showRecepcao = hasRole(session, ["RECEPCAO", "ADMIN_TENANT"]);
   const showConfig = hasRole(session, ["ADMIN_TENANT", "SUPER_ADMIN"]);
   const showTenants = hasRole(session, ["SUPER_ADMIN"]);
 
+  const links = [
+    { href: "/dashboard", label: "Dashboard", show: true },
+    { href: "/agenda", label: "Agenda", show: showRecepcao },
+    { href: "/prontuario", label: "Prontuário", show: showClinico },
+    { href: "/producao", label: "Produção", show: showFaturamento },
+    { href: "/auditoria", label: "Auditoria", show: showAuditoria },
+    { href: "/config/usuarios", label: "Usuários", show: showConfig },
+    { href: "/config/tenants", label: "Tenants", show: showTenants },
+    { href: "/perfil", label: "Perfil", show: true },
+  ].filter((link) => link.show);
+
   return (
     <NotificationsProvider>
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <header className="flex items-center justify-between">
-          <div className="space-x-4 text-sm font-semibold">
-            <Link href="/">Dashboard</Link>
-            {showRecepcao && <Link href="/agenda">Agenda</Link>}
-            {showClinico && <Link href="/prontuario">Prontuário</Link>}
-            {showFaturamento && <Link href="/producao">Produção</Link>}
-            {showAuditoria && <Link href="/auditoria">Auditoria</Link>}
-            {showConfig && <Link href="/config/usuarios">Usuários</Link>}
-            {showTenants && <Link href="/config/tenants">Tenants</Link>}
-            <Link href="/perfil">Perfil</Link>
-          </div>
-          <div className="text-xs text-gray-600 space-x-3">
+      <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+        <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+          <nav className="flex flex-wrap items-center gap-3 text-sm font-semibold">
+            {links.map((link) => (
+              <Link key={link.href} href={link.href} className="hover:text-sky-300">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
             {session ? (
               <>
                 <span>Tenant #{session.tenantId}</span>
@@ -54,6 +64,7 @@ export function AppShell({ children }: Props) {
                   onClick={() => {
                     clearSession();
                     setSession(null);
+                    router.push("/login");
                   }}
                 >
                   Sair
@@ -66,7 +77,7 @@ export function AppShell({ children }: Props) {
             )}
           </div>
         </header>
-        <div>{children}</div>
+        <main className="flex-1 px-6 py-6">{children}</main>
       </div>
     </NotificationsProvider>
   );

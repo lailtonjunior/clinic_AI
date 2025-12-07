@@ -1,12 +1,14 @@
-import os
 import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.database import Base
+from app.models import entities  # ensure all tables are registered  # noqa: F401
+from app.database import get_db as base_get_db
 from app import models
 from app.auth import get_password_hash
 from app.api.deps import get_db_session
@@ -14,11 +16,24 @@ from app.main import app
 
 
 def _setup_db():
-    engine = create_engine("sqlite:///:memory:", future=True, connect_args={"check_same_thread": False})
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        expire_on_commit=False,
+        bind=engine,
+        future=True,
+    )
     Base.metadata.create_all(bind=engine)
 
     def override_get_db():
+        # Garantir que as tabelas existem antes de abrir a sessao
+        Base.metadata.create_all(bind=engine)
         db = TestingSessionLocal()
         try:
             yield db
@@ -26,6 +41,7 @@ def _setup_db():
             db.close()
 
     app.dependency_overrides[get_db_session] = override_get_db
+    app.dependency_overrides[base_get_db] = override_get_db
     return TestingSessionLocal, engine
 
 
