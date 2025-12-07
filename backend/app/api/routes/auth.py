@@ -40,6 +40,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db_session)):
         totp = pyotp.TOTP(user.mfa_secret)
         if not payload.mfa_code or not totp.verify(payload.mfa_code):
             raise HTTPException(status_code=401, detail="Codigo MFA invalido ou ausente")
+    elif settings.mfa_required:
+        raise HTTPException(status_code=401, detail="MFA requerido para este ambiente")
     token = create_access_token(
         user_id=user.id,
         tenant_id=payload.tenant_id,
@@ -107,3 +109,13 @@ def mfa_confirm(
     db.add(current_user)
     db.commit()
     return {"status": "ok", "mfa_enabled": True}
+
+
+@router.post("/mfa/verify")
+def mfa_verify(
+    payload: MfaConfirmRequest,
+    db: Session = Depends(get_db_session),
+    current_user: models.Usuario = Depends(get_current_user),
+):
+    # Alias para confirm, mantem compatibilidade
+    return mfa_confirm(payload, db=db, current_user=current_user)

@@ -16,6 +16,7 @@ from app.services import sigtap_rules
 from app.services import export_bpa, export_apac
 from app.services import minio_service
 from app.services import audit_log_service
+from app.services import validators
 from app.services.procedimento_validator import ProcedimentoValidatorService
 from app.dependencies import (
     apply_tenant_filter,
@@ -125,8 +126,15 @@ def create_paciente(
     current_user: models.Usuario = Depends(require_roles(Role.RECEPCAO.value, Role.CLINICO.value, Role.ADMIN_TENANT.value)),
     current_tenant_id: int = Depends(get_current_tenant_id),
 ):
+    errors: list[str] = []
     if not payload.cns and not payload.cpf:
-        raise HTTPException(status_code=400, detail="CPF ou CNS obrigatorio")
+        errors.append("CPF ou CNS obrigatorio")
+    if payload.cpf and not validators.validate_cpf(payload.cpf):
+        errors.append("CPF invalido")
+    if payload.cns and not validators.validate_cns(payload.cns):
+        errors.append("CNS invalido")
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
     data = payload.model_dump()
     data["tenant_id"] = current_tenant_id
     pac = models.Paciente(**data)
@@ -249,7 +257,18 @@ def create_evolucao(
     # Backend is responsible for hashing/assinatura; front envia apenas texto.
     if not data.get("hash_sha256"):
         data["hash_sha256"] = hashlib.sha256(data["texto_estruturado"].encode("utf-8")).hexdigest()
+    # Assinatura simples por padrão; ICP-Brasil poderá ser integrada futuramente.
     data["assinado"] = data.get("assinado", False)
+    data["assinatura_modo"] = "SIMPLE"
+    data["assinatura_hash"] = hashlib.sha256(
+        f"{data['hash_sha256']}|{current_user.id}|{datetime.utcnow().isoformat()}".encode("utf-8")
+    ).hexdigest()
+    data["assinatura_metadata"] = {
+        "usuario_id": current_user.id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "modo": "SIMPLE",
+        "icp_todo": "Integrar com prestador ICP-Brasil quando settings.icp_brasil_enabled=True",
+    }
     evo = models.EvolucaoProntuario(**data)
     obj = _commit_and_refresh(db, evo)
     audit_log_service.log_action(db, current_tenant_id, current_user.id, "CRIAR_EVOLUCAO", "EvolucaoProntuario", obj.id)
@@ -273,6 +292,13 @@ def create_procedimento(
     current_user: models.Usuario = Depends(require_roles(Role.CLINICO.value, Role.ADMIN_TENANT.value, Role.FATURAMENTO.value)),
     current_tenant_id: int = Depends(get_current_tenant_id),
 ):
+    validation_errors: list[str] = []
+    if not validators.validate_sigtap_codigo(payload.sigtap_codigo):
+        validation_errors.append("Codigo SIGTAP invalido")
+    if payload.cid10 and not validators.validate_cid(payload.cid10):
+        validation_errors.append("CID em formato invalido")
+    if validation_errors:
+        raise HTTPException(status_code=422, detail=validation_errors)
     atendimento = db.get(models.Atendimento, payload.atendimento_id)
     if not atendimento:
         raise HTTPException(status_code=404, detail="Atendimento nao encontrado")
@@ -437,6 +463,8 @@ def dashboard(
 def export_bpa_endpoint(
     request: Request,
     competencia: str = Query(..., min_length=6, max_length=6),
+    unidade_id: int | None = Query(None),
+    profissional_id: int | None = Query(None),
     db: Session = Depends(get_db_session),
     current_user: models.Usuario = Depends(require_roles(Role.FATURAMENTO.value, Role.ADMIN_TENANT.value)),
     current_tenant_id: int = Depends(get_current_tenant_id),
@@ -445,56 +473,20 @@ def export_bpa_endpoint(
     erros_globais = [e for item in audit["erros"] for e in item["erros"] if e]
     if erros_globais:
         raise HTTPException(status_code=400, detail={"erros": erros_globais})
-    stmt = select(models.ProcedimentoSUS).where(
-        models.ProcedimentoSUS.competencia_aaaamm == competencia,
-        models.ProcedimentoSUS.tenant_id == current_tenant_id,
-    )
-    procedimentos = db.scalars(stmt).all()
-    linhas = []
-    for proc in procedimentos:
-        atendimento = db.get(models.Atendimento, proc.atendimento_id)
-        paciente = db.get(models.Paciente, atendimento.paciente_id)
-        profissional = db.get(models.Profissional, atendimento.profissional_id)
-        unidade = db.get(models.Unidade, atendimento.unidade_id)
-        tabela = sigtap_rules.get_tabela_para_competencia(db, proc.sigtap_codigo, proc.competencia_aaaamm)
-        doc = sigtap_rules.decide_documento_bpa(paciente, tabela)
-        linhas.append({
-            "cnes": unidade.cnes,
-            "competencia": proc.competencia_aaaamm,
-            "cns_prof": profissional.cns,
-            "cbo": proc.profissional_cbo,
-            "data_atendimento": atendimento.data.strftime("%Y%m%d"),
-            "procedimento": proc.sigtap_codigo,
-            "cns_paciente": paciente.cns if doc == "CNS" else "",
-            "cpf_paciente": paciente.cpf if doc == "CPF" else "",
-            "sexo": paciente.sexo,
-            "cid": proc.cid10,
-            "idade": sigtap_rules.calcular_idade(paciente.data_nascimento, atendimento.data.date()),
-            "quantidade": proc.quantidade,
-            "valor": proc.valores.get("valor", 0) if proc.valores else 0,
-        })
-    conteudo = export_bpa.gerar_arquivo(
+    conteudo, path = exports._generate_bpa(
         competencia=competencia,
-        orgao="CER",
-        sigla="CER",
-        cnpj="00000000000000",
-        destino="M",
-        versao="0.1.0",
-        procedimentos=linhas,
+        tenant_id=current_tenant_id,
+        db=db,
+        unidade_id=unidade_id,
+        profissional_id=profissional_id,
     )
-    destino_path = Path("exports/bpa") / f"bpa_{competencia}.rem"
-    _garante_dir(destino_path)
-    destino_path.write_text(conteudo, encoding="utf-8")
-    key = f"exports/bpa/bpa_{competencia}.rem"
-    uploaded_key = minio_service.upload_bytes(key, conteudo.encode("ascii", errors="ignore"))
-    presigned = minio_service.presign_get(uploaded_key) if uploaded_key else None
 
     unidade_ref = db.scalars(select(models.Unidade).where(models.Unidade.tenant_id == current_tenant_id)).first()
     exp = models.ExportacaoBPA(
         tenant_id=current_tenant_id,
         competencia=competencia,
         unidade_id=unidade_ref.id if unidade_ref else None,
-        arquivo_path=presigned or str(destino_path),
+        arquivo_path=path,
         checksum="",
         status="gerado",
         erros_json={},
@@ -505,7 +497,7 @@ def export_bpa_endpoint(
 
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
-        return {"url": presigned or str(destino_path), "preview": conteudo[:400]}
+        return {"url": path, "preview": conteudo[:400]}
 
     filename = f"BPA_{competencia}.rem"
     return _build_download_response(conteudo, filename)

@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, List, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -19,23 +19,39 @@ def _garante_dir(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _generate_bpa(competencia: str, tenant_id: int, db: Session) -> tuple[str, str]:
+def _coletar_procedimentos_bpa(
+    competencia: str,
+    tenant_id: int,
+    db: Session,
+    unidade_id: int | None = None,
+    profissional_id: int | None = None,
+) -> List[Dict[str, str]]:
     stmt = select(models.ProcedimentoSUS).where(
         models.ProcedimentoSUS.competencia_aaaamm == competencia,
         models.ProcedimentoSUS.tenant_id == tenant_id,
     )
     procedimentos = db.scalars(stmt).all()
-    if not procedimentos:
-        raise HTTPException(status_code=400, detail="Nenhum procedimento encontrado para a competencia")
-
-    linhas = []
+    linhas: List[Dict[str, str]] = []
     for proc in procedimentos:
         atendimento = db.get(models.Atendimento, proc.atendimento_id)
+        if not atendimento:
+            continue
+        if unidade_id and atendimento.unidade_id != unidade_id:
+            continue
+        if profissional_id and atendimento.profissional_id != profissional_id:
+            continue
         paciente = db.get(models.Paciente, atendimento.paciente_id)
         profissional = db.get(models.Profissional, atendimento.profissional_id)
         unidade = db.get(models.Unidade, atendimento.unidade_id)
+        if not paciente or not profissional or not unidade:
+            continue
         tabela = sigtap_rules.get_tabela_para_competencia(db, proc.sigtap_codigo, proc.competencia_aaaamm)
         doc = sigtap_rules.decide_documento_bpa(paciente, tabela)
+        valor_procedimento = 0
+        if proc.valores and proc.valores.get("valor") is not None:
+            valor_procedimento = proc.valores.get("valor")
+        elif tabela and tabela.valor is not None:
+            valor_procedimento = float(tabela.valor)
         linhas.append({
             "cnes": unidade.cnes,
             "competencia": proc.competencia_aaaamm,
@@ -49,8 +65,22 @@ def _generate_bpa(competencia: str, tenant_id: int, db: Session) -> tuple[str, s
             "cid": proc.cid10,
             "idade": sigtap_rules.calcular_idade(paciente.data_nascimento, atendimento.data.date()),
             "quantidade": proc.quantidade,
-            "valor": proc.valores.get("valor", 0) if proc.valores else 0,
+            "valor": valor_procedimento,
         })
+    return linhas
+
+
+def _generate_bpa(
+    competencia: str,
+    tenant_id: int,
+    db: Session,
+    unidade_id: int | None = None,
+    profissional_id: int | None = None,
+) -> tuple[str, str]:
+    procedimentos = _coletar_procedimentos_bpa(competencia, tenant_id, db, unidade_id=unidade_id, profissional_id=profissional_id)
+    if not procedimentos:
+        raise HTTPException(status_code=400, detail="Nenhum procedimento encontrado para a competencia")
+
     conteudo = export_bpa.gerar_arquivo(
         competencia=competencia,
         orgao="CER",
@@ -58,7 +88,7 @@ def _generate_bpa(competencia: str, tenant_id: int, db: Session) -> tuple[str, s
         cnpj="00000000000000",
         destino="M",
         versao="0.1.0",
-        procedimentos=linhas,
+        procedimentos=procedimentos,
     )
     destino_path = Path("exports/bpa") / f"bpa_{competencia}.rem"
     _garante_dir(destino_path)
@@ -68,16 +98,43 @@ def _generate_bpa(competencia: str, tenant_id: int, db: Session) -> tuple[str, s
     return conteudo, presigned or str(destino_path)
 
 
-def _generate_apac(competencia: str, tenant_id: int, db: Session) -> tuple[str, str]:
-    procedimentos = db.scalars(select(models.ProcedimentoSUS).where(
+def _coletar_procedimentos_apac(
+    competencia: str,
+    tenant_id: int,
+    db: Session,
+    unidade_id: int | None = None,
+    profissional_id: int | None = None,
+) -> List[models.ProcedimentoSUS]:
+    stmt = select(models.ProcedimentoSUS).where(
         models.ProcedimentoSUS.competencia_aaaamm == competencia,
         models.ProcedimentoSUS.tenant_id == tenant_id,
-    )).all()
-    procedimentos_apac = []
+    )
+    procedimentos = db.scalars(stmt).all()
+    filtrados: List[models.ProcedimentoSUS] = []
     for proc in procedimentos:
+        atendimento = db.get(models.Atendimento, proc.atendimento_id)
+        if not atendimento:
+            continue
+        if unidade_id and atendimento.unidade_id != unidade_id:
+            continue
+        if profissional_id and atendimento.profissional_id != profissional_id:
+            continue
         tabela = sigtap_rules.get_tabela_para_competencia(db, proc.sigtap_codigo, proc.competencia_aaaamm)
         if tabela and tabela.exige_apac:
-            procedimentos_apac.append(proc)
+            filtrados.append(proc)
+    return filtrados
+
+
+def _generate_apac(
+    competencia: str,
+    tenant_id: int,
+    db: Session,
+    unidade_id: int | None = None,
+    profissional_id: int | None = None,
+) -> tuple[str, str]:
+    procedimentos_apac = _coletar_procedimentos_apac(
+        competencia, tenant_id, db, unidade_id=unidade_id, profissional_id=profissional_id
+    )
     if not procedimentos_apac:
         raise HTTPException(status_code=400, detail="Nenhum procedimento exige APAC nesta competencia")
     proc = procedimentos_apac[0]
@@ -85,9 +142,10 @@ def _generate_apac(competencia: str, tenant_id: int, db: Session) -> tuple[str, 
     paciente = db.get(models.Paciente, atendimento.paciente_id)
     profissional = db.get(models.Profissional, atendimento.profissional_id)
     unidade = db.get(models.Unidade, atendimento.unidade_id)
+    numero_apac = str(proc.id).zfill(13)
     corpo = {
         "competencia": competencia,
-        "numero_apac": "0000000000001",
+        "numero_apac": numero_apac,
         "uf": unidade.uf,
         "cnes": unidade.cnes,
         "data_autorizacao": atendimento.data.strftime("%Y%m%d"),
@@ -145,7 +203,7 @@ def _generate_apac(competencia: str, tenant_id: int, db: Session) -> tuple[str, 
     for proc in procedimentos_apac:
         procs.append({
             "competencia": competencia,
-            "numero_apac": corpo["numero_apac"],
+            "numero_apac": numero_apac,
             "codigo": proc.sigtap_codigo,
             "quantidade": proc.quantidade,
             "cbo": proc.profissional_cbo,

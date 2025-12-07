@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     sigtap_admin_token: str = "dev-admin-token"
     sigtap_job_enabled: bool = True
     sigtap_job_interval_hours: int = 24
+    mfa_required: bool = False
+    icp_brasil_enabled: bool = False
     seed_tenant_name: str | None = None
     seed_admin_email: str | None = None
     seed_admin_password: str | None = None

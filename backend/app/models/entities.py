@@ -123,6 +123,9 @@ class EvolucaoProntuario(Base):
     hash_sha256 = Column(String(64), nullable=False)
     assinado = Column(Boolean, default=False)
     assinatura_meta = Column(JSON, default={})
+    assinatura_modo = Column(String(20), nullable=False, default="NONE")
+    assinatura_hash = Column(String(128), nullable=True)
+    assinatura_metadata = Column(JSON, default={})
     criado_em = Column(DateTime, default=datetime.utcnow)
 
 
