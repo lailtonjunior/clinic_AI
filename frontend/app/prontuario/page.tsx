@@ -8,13 +8,13 @@ import { AssistantChat } from "../../components/clinical/AssistantChat";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { useNotifications } from "../../components/ui/notifications";
-import { createEvolucao, getAtendimentos, getEvolucoes } from "../../lib/api";
+import { Atendimento, Evolucao, createEvolucao, getAtendimentos, getEvolucoes } from "../../lib/api";
 import { getSession } from "../../lib/auth";
 
 export default function ProntuarioPage() {
   const { notifyError, notifySuccess } = useNotifications();
-  const [atendimentos, setAtendimentos] = useState<any[]>([]);
-  const [evolucoes, setEvolucoes] = useState<any[]>([]);
+  const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
+  const [evolucoes, setEvolucoes] = useState<Evolucao[]>([]);
   const [selectedAtendimento, setSelectedAtendimento] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAssistant, setShowAssistant] = useState(false);

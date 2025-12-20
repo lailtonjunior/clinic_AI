@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CompetenciaPicker } from "../../components/sus/CompetenciaPicker";
 import { AuditoriaResultado } from "../../components/sus/AuditoriaResultado";
@@ -8,6 +8,14 @@ import { getAudit, postApac, postBpa, fetchRemFile, AuditError } from "../../lib
 type AuditStatus = "pending" | "ok" | "error";
 
 export default function AuditoriaPage() {
+  return (
+    <Suspense fallback={<div className="text-slate-400">Carregando auditoria...</div>}>
+      <AuditoriaContent />
+    </Suspense>
+  );
+}
+
+function AuditoriaContent() {
   const searchParams = useSearchParams();
   const initialCompetencia = searchParams.get("competencia") || "202501";
 

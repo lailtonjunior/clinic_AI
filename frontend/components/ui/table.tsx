@@ -1,5 +1,5 @@
 "use client";
-import { HTMLAttributes } from "react";
+import { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -31,10 +31,10 @@ export function TableRow(props: HTMLAttributes<HTMLTableRowElement>) {
   return <tr className="hover:bg-slate-900/40" {...props} />;
 }
 
-export function TableHeaderCell(props: HTMLAttributes<HTMLTableCellElement>) {
+export function TableHeaderCell(props: ThHTMLAttributes<HTMLTableCellElement>) {
   return <th className="px-3 py-2 text-left font-semibold" {...props} />;
 }
 
-export function TableCell(props: HTMLAttributes<HTMLTableCellElement>) {
+export function TableCell(props: TdHTMLAttributes<HTMLTableCellElement>) {
   return <td className="px-3 py-2 align-top" {...props} />;
 }

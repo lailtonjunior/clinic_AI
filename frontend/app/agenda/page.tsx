@@ -26,7 +26,7 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
 
 export default function AgendaPage() {
   const { notifyError, notifySuccess } = useNotifications();
-  const [agendas, setAgendas] = useState<any[]>([]);
+  const [agendas, setAgendas] = useState<import("../../lib/api").AgendaItem[]>([]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 

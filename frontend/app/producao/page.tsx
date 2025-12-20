@@ -1,10 +1,11 @@
-﻿import Link from "next/link";
+﻿"use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from "../../components/ui/table";
 import { useNotifications } from "../../components/ui/notifications";
-import { getExports, retryExport } from "../../lib/api";
+import { ExportItem, getExports, retryExport } from "../../lib/api";
 import { AssistantChat } from "../../components/clinical/AssistantChat";
 
 const procedimentos = [
@@ -22,8 +23,8 @@ function competenciaAtual(): string {
 export default function ProducaoPage() {
   const cmp = competenciaAtual();
   const { notifyError, notifySuccess } = useNotifications();
-  const [exportsBpa, setExportsBpa] = useState<any[]>([]);
-  const [exportsApac, setExportsApac] = useState<any[]>([]);
+  const [exportsBpa, setExportsBpa] = useState<ExportItem[]>([]);
+  const [exportsApac, setExportsApac] = useState<ExportItem[]>([]);
   const [showErrors, setShowErrors] = useState<any | null>(null);
   const [showAssistant, setShowAssistant] = useState(false);
 
@@ -33,7 +34,7 @@ export default function ProducaoPage() {
       setExportsBpa(bpa);
       setExportsApac(apac);
     } catch (err: any) {
-      notifyError(err?.message || "Erro ao carregar exportações");
+      notifyError(err?.message || "Erro ao carregar exportacoes");
     }
   }
 
@@ -44,10 +45,10 @@ export default function ProducaoPage() {
   async function handleRetry(tipo: "bpa" | "apac", id: number) {
     try {
       await retryExport(tipo, id);
-      notifySuccess("Exportação reprocessada");
+      notifySuccess("Exportacao reprocessada");
       loadExports();
     } catch (err: any) {
-      notifyError(err?.message || "Erro ao reprocessar exportação");
+      notifyError(err?.message || "Erro ao reprocessar exportacao");
     }
   }
 
@@ -56,17 +57,17 @@ export default function ProducaoPage() {
       <TableHead>
         <TableRow>
           <TableHeaderCell>ID</TableHeaderCell>
-          <TableHeaderCell>Competência</TableHeaderCell>
+          <TableHeaderCell>Competencia</TableHeaderCell>
           <TableHeaderCell>Status</TableHeaderCell>
           <TableHeaderCell>Arquivo</TableHeaderCell>
-          <TableHeaderCell className="text-right">Ações</TableHeaderCell>
+          <TableHeaderCell className="text-right">Acoes</TableHeaderCell>
         </TableRow>
       </TableHead>
       <TableBody>
         {items.length === 0 ? (
           <TableRow>
             <TableCell colSpan={5} className="text-center text-slate-400">
-              Nenhuma exportação encontrada.
+              Nenhuma exportacao encontrada.
             </TableCell>
           </TableRow>
         ) : (
@@ -98,16 +99,13 @@ export default function ProducaoPage() {
   return (
     <main className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl">Produção SUS</h1>
+        <h1 className="text-2xl">Producao SUS</h1>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/auditoria?competencia=${cmp}`}
-            className="px-4 py-2 bg-sky-600 rounded text-sm hover:bg-sky-500 transition"
-          >
-            Auditar e Exportar Produção
+          <Link href={`/auditoria?competencia=${cmp}`} className="px-4 py-2 bg-sky-600 rounded text-sm hover:bg-sky-500 transition">
+            Auditar e Exportar Producao
           </Link>
           <Button variant="secondary" onClick={() => setShowAssistant(true)}>
-            Assistente Clínico
+            Assistente Clinico
           </Button>
         </div>
       </div>
@@ -139,7 +137,7 @@ export default function ProducaoPage() {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Histórico de exportações</h2>
+        <h2 className="text-xl font-semibold">Historico de exportacoes</h2>
         <div className="space-y-2">
           <h3 className="text-lg font-semibold">BPA</h3>
           {renderTable(exportsBpa, "bpa")}
@@ -154,14 +152,12 @@ export default function ProducaoPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-lg space-y-3 rounded-lg border border-slate-800 bg-slate-900 p-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold">Erros da exportação</h4>
+              <h4 className="text-lg font-semibold">Erros da exportacao</h4>
               <Button variant="outline" onClick={() => setShowErrors(null)}>
                 Fechar
               </Button>
             </div>
-            <pre className="max-h-80 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100">
-{JSON.stringify(showErrors, null, 2)}
-            </pre>
+            <pre className="max-h-80 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(showErrors, null, 2)}</pre>
           </div>
         </div>
       )}
@@ -169,7 +165,7 @@ export default function ProducaoPage() {
       {showAssistant && (
         <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-slate-800 bg-slate-900 p-4 shadow-xl">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Assistente Clínico</h3>
+            <h3 className="text-lg font-semibold">Assistente Clinico</h3>
             <Button variant="outline" onClick={() => setShowAssistant(false)}>
               Fechar
             </Button>

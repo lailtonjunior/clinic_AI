@@ -26,7 +26,7 @@ export function AssistantChat({ initialContext }: Props) {
     setInput("");
     try {
       const res = await askAssistant({ mensagem: initialContext ? `${initialContext}\n\n${content}` : content });
-      setMessages((prev) => [...prev, { role: "assistant", content: res.resposta }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: res.resposta || "Sem resposta" }]);
     } catch (err: any) {
       notifyError(err?.message || "Erro ao consultar assistente");
     } finally {

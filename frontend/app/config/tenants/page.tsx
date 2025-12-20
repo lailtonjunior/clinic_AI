@@ -4,9 +4,10 @@ import { createTenant, getTenants } from "../../../lib/api";
 import { TenantTable } from "../../../components/tenants/TenantTable";
 import { getSession, hasRole } from "../../../lib/auth";
 import { useRouter } from "next/navigation";
+import { Tenant } from "../../../lib/api";
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 

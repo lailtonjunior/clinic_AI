@@ -5,9 +5,10 @@ import { UserTable } from "../../../components/users/UserTable";
 import { UserForm } from "../../../components/users/UserForm";
 import { getSession, hasRole } from "../../../lib/auth";
 import { useRouter } from "next/navigation";
+import { User } from "../../../lib/api";
 
 export default function UsuariosPage() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 

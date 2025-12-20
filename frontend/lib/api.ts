@@ -20,6 +20,63 @@ export type DashboardResponse = {
   }[];
 };
 
+export type Tenant = {
+  id: number;
+  name: string;
+  cnpj?: string | null;
+};
+
+export type AgendaItem = {
+  id: number;
+  data: string;
+  tipo?: string;
+  status?: string;
+  profissional_id?: number;
+  paciente_id?: number;
+  [key: string]: any;
+};
+
+export type User = {
+  id: number;
+  email: string;
+  nome: string;
+  roles: string[];
+  ativo: boolean;
+  must_change_password: boolean;
+};
+
+export type ExportItem = {
+  id: number;
+  competencia: string;
+  status: string;
+  arquivo_path?: string;
+  erros_json?: Record<string, any>;
+  tipo?: string;
+};
+
+export type Atendimento = {
+  id: number;
+  paciente_id?: number;
+  profissional_id?: number;
+  unidade_id?: number;
+  data: string;
+  tipo?: string;
+  status?: string;
+  [key: string]: any;
+};
+
+export type Evolucao = {
+  id: number;
+  atendimento_id: number;
+  texto_estruturado?: string;
+  criado_em?: string;
+  [key: string]: any;
+};
+
+export type AssistantReply = {
+  resposta: string;
+};
+
 async function handleJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text();
@@ -63,7 +120,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
 }
 
 export async function fetchRemFile(url: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/${url.replace(/^\\//, "")}`);
+  const res = await fetch(`${API_BASE}/${url.replace(/^\//, "")}`);
   if (!res.ok) {
     throw new Error(`Falha ao baixar arquivo ${url}`);
   }
@@ -73,7 +130,7 @@ export async function fetchRemFile(url: string): Promise<string> {
 export async function getUsers() {
   const session = getSession();
   const res = await fetch(`${API_BASE}/api/users`, { headers: { ...authHeaders(session) } });
-  return handleJson(res);
+  return handleJson<User[]>(res);
 }
 
 export async function createUser(payload: any) {
@@ -109,7 +166,7 @@ export async function resetUserPassword(id: number, payload: any = {}) {
 export async function getTenants() {
   const session = getSession();
   const res = await fetch(`${API_BASE}/api/tenants`, { headers: { ...authHeaders(session) } });
-  return handleJson(res);
+  return handleJson<Tenant[]>(res);
 }
 
 export async function createTenant(payload: any) {
@@ -147,13 +204,13 @@ export async function getAtendimentos() {
   const res = await fetch(`${API_BASE}/api/atendimentos`, {
     headers: { ...authHeaders(session) },
   });
-  return handleJson(res);
+  return handleJson<Atendimento[]>(res);
 }
 
 export async function getAgendas() {
   const session = getSession();
   const res = await fetch(`${API_BASE}/api/agendas`, { headers: { ...authHeaders(session) } });
-  return handleJson(res);
+  return handleJson<AgendaItem[]>(res);
 }
 
 export async function updateAgenda(id: number, payload: any) {
@@ -169,7 +226,7 @@ export async function updateAgenda(id: number, payload: any) {
 export async function getEvolucoes() {
   const session = getSession();
   const res = await fetch(`${API_BASE}/api/evolucoes`, { headers: { ...authHeaders(session) } });
-  return handleJson(res);
+  return handleJson<Evolucao[]>(res);
 }
 
 export async function createEvolucao(payload: any) {
@@ -186,7 +243,7 @@ export async function getExports(tipo: "bpa" | "apac", competencia?: string) {
   const session = getSession();
   const params = competencia ? `?tipo=${tipo}&competencia=${competencia}` : `?tipo=${tipo}`;
   const res = await fetch(`${API_BASE}/api/exports${params}`, { headers: { ...authHeaders(session) } });
-  return handleJson(res);
+  return handleJson<ExportItem[]>(res);
 }
 
 export async function retryExport(tipo: "bpa" | "apac", id: number) {
@@ -205,5 +262,5 @@ export async function askAssistant(payload: { mensagem: string; paciente_id?: nu
     headers: { "Content-Type": "application/json", ...authHeaders(session) },
     body: JSON.stringify(payload),
   });
-  return handleJson(res);
+  return handleJson<AssistantReply>(res);
 }
