@@ -5,10 +5,17 @@ export type Session = {
 };
 
 const STORAGE_KEY = "nexusclin_session";
+const TOKEN_COOKIE_KEY = "nexusclin_token";
 
 export function setSession(session: Session) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  
+  // Also save token in cookie for middleware access
+  // Cookie expires in 7 days (same as typical JWT expiry)
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 7);
+  document.cookie = `${TOKEN_COOKIE_KEY}=${session.token}; path=/; expires=${expires.toUTCString()}; SameSite=Lax`;
 }
 
 export const saveSession = setSession;
@@ -28,6 +35,15 @@ export function getSession(): Session | null {
 export function clearSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(STORAGE_KEY);
+  
+  // Clear cookie as well
+  document.cookie = `${TOKEN_COOKIE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
+export function getTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(^| )${TOKEN_COOKIE_KEY}=([^;]+)`));
+  return match ? match[2] : null;
 }
 
 export function isAuthenticated(): boolean {
