@@ -1,6 +1,7 @@
 import "./globals.css";
 import { ReactNode } from "react";
 import { AppShell } from "../components/AppShell";
+import { Providers } from "../lib/providers";
 
 export const metadata = {
   title: "NexusClin",
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
       <body>
-        <AppShell>{children}</AppShell>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

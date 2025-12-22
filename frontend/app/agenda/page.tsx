@@ -1,10 +1,10 @@
 ﻿"use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from "../../components/ui/table";
 import { useNotifications } from "../../components/ui/notifications";
-import { getAgendas, updateAgenda } from "../../lib/api";
+import { useAgendas, useUpdateAgenda } from "../../lib/hooks/useAgenda";
 
 const hours = Array.from({ length: 10 }, (_, i) => 8 + i); // 08-17h
 
@@ -26,29 +26,15 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
 
 export default function AgendaPage() {
   const { notifyError, notifySuccess } = useNotifications();
-  const [agendas, setAgendas] = useState<import("../../lib/api").AgendaItem[]>([]);
+  const { data: agendas = [], isLoading: loading } = useAgendas();
+  const updateAgenda = useUpdateAgenda();
   const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const weekStart = useMemo(() => startOfWeek(new Date()), []);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000)), [weekStart]);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await getAgendas();
-        setAgendas(data);
-      } catch (err: any) {
-        notifyError(err?.message || "Erro ao carregar agenda");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [notifyError]);
-
   const byDay = useMemo(() => {
-    const map: Record<string, any[]> = {};
+    const map: Record<string, Array<{ dateObj: Date; [key: string]: unknown }>> = {};
     days.forEach((d) => (map[d.toDateString()] = []));
     agendas.forEach((ag) => {
       const dt = new Date(ag.data);
@@ -63,11 +49,14 @@ export default function AgendaPage() {
     const newDate = new Date(day);
     newDate.setHours(hour, 0, 0, 0);
     try {
-      await updateAgenda(draggingId, { data: newDate.toISOString() });
+      await updateAgenda.mutateAsync({
+        id: draggingId,
+        payload: { data: newDate.toISOString() },
+      });
       notifySuccess("Agendamento atualizado");
-      setAgendas((prev) => prev.map((a) => (a.id === draggingId ? { ...a, data: newDate.toISOString() } : a)));
-    } catch (err: any) {
-      notifyError(err?.message || "Erro ao reagendar");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao reagendar";
+      notifyError(message);
     } finally {
       setDraggingId(null);
     }

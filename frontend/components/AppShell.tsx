@@ -1,36 +1,27 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ReactNode } from "react";
 
-import { clearSession, getSession, hasRole, isAuthenticated, Session } from "../lib/auth";
+import { hasRole } from "../lib/auth";
+import { useSession, useLogout } from "../lib/hooks/useAuth";
 import { NotificationsProvider } from "./ui/notifications";
 
 type Props = { children: ReactNode };
 
 export function AppShell({ children }: Props) {
-  const [session, setSession] = useState<Session | null>(null);
+  const { data: session } = useSession();
+  const logout = useLogout();
   const router = useRouter();
-  const pathname = usePathname();
 
-  useEffect(() => {
-    const sess = getSession();
-    setSession(sess);
-    if (!isAuthenticated() && pathname !== "/login") {
-      router.push("/login");
-    }
-    if (sess && pathname === "/login") {
-      router.push("/dashboard");
-    }
-  }, [pathname, router]);
-
-  const showRecepcao = hasRole(session, ["RECEPCAO", "ADMIN_TENANT"]);
-  const showClinico = hasRole(session, ["CLINICO", "ADMIN_TENANT"]);
-  const showFaturamento = hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN"]);
-  const showAuditoria = hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN", "AUDITOR_INTERNO"]);
-  const showConfig = hasRole(session, ["ADMIN_TENANT", "SUPER_ADMIN"]);
-  const showTenants = hasRole(session, ["SUPER_ADMIN"]);
+  // Middleware handles auth redirects, so session should always exist here (except login page)
+  const showRecepcao = session ? hasRole(session, ["RECEPCAO", "ADMIN_TENANT"]) : false;
+  const showClinico = session ? hasRole(session, ["CLINICO", "ADMIN_TENANT"]) : false;
+  const showFaturamento = session ? hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN"]) : false;
+  const showAuditoria = session ? hasRole(session, ["FATURAMENTO", "ADMIN_TENANT", "SUPER_ADMIN", "AUDITOR_INTERNO"]) : false;
+  const showConfig = session ? hasRole(session, ["ADMIN_TENANT", "SUPER_ADMIN"]) : false;
+  const showTenants = session ? hasRole(session, ["SUPER_ADMIN"]) : false;
 
   const links = [
     { href: "/dashboard", label: "Dashboard", show: true },
@@ -42,6 +33,10 @@ export function AppShell({ children }: Props) {
     { href: "/config/tenants", label: "Tenants", show: showTenants },
     { href: "/perfil", label: "Perfil", show: true },
   ].filter((link) => link.show);
+
+  const handleLogout = () => {
+    logout.mutate();
+  };
 
   return (
     <NotificationsProvider>
@@ -60,14 +55,12 @@ export function AppShell({ children }: Props) {
                 <span>Tenant #{session.tenantId}</span>
                 <span>{session.roles.join(", ")}</span>
                 <button
+                  type="button"
                   className="underline"
-                  onClick={() => {
-                    clearSession();
-                    setSession(null);
-                    router.push("/login");
-                  }}
+                  onClick={handleLogout}
+                  disabled={logout.isPending}
                 >
-                  Sair
+                  {logout.isPending ? "Saindo..." : "Sair"}
                 </button>
               </>
             ) : (

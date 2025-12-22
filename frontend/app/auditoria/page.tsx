@@ -3,7 +3,9 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CompetenciaPicker } from "../../components/sus/CompetenciaPicker";
 import { AuditoriaResultado } from "../../components/sus/AuditoriaResultado";
-import { getAudit, postApac, postBpa, fetchRemFile, AuditError } from "../../lib/api";
+import { useAudit, usePostBpa, usePostApac } from "../../lib/hooks/useAudit";
+import { apiGet } from "../../lib/api/client";
+import type { AuditError } from "../../lib/api/types";
 
 type AuditStatus = "pending" | "ok" | "error";
 
@@ -20,52 +22,42 @@ function AuditoriaContent() {
   const initialCompetencia = searchParams.get("competencia") || "202501";
 
   const [competencia, setCompetencia] = useState(initialCompetencia);
-  const [auditStatus, setAuditStatus] = useState<AuditStatus>("pending");
-  const [erros, setErros] = useState<AuditError[]>([]);
   const [preview, setPreview] = useState("");
   const [downloadUrlBpa, setDownloadUrlBpa] = useState<string | null>(null);
   const [downloadUrlApac, setDownloadUrlApac] = useState<string | null>(null);
-  const [loadingAudit, setLoadingAudit] = useState(false);
-  const [loadingBpa, setLoadingBpa] = useState(false);
-  const [loadingApac, setLoadingApac] = useState(false);
   const competenciaValida = useMemo(() => /^\d{6}$/.test(competencia), [competencia]);
 
-  useEffect(() => {
-    if (competenciaValida) {
-      runAudit(competencia);
-    }
-  }, [competenciaValida]);
+  const { data: auditData, isLoading: loadingAudit, refetch: refetchAudit } = useAudit(
+    competencia,
+    competenciaValida
+  );
 
-  async function runAudit(cmp: string) {
-    if (!/^\d{6}$/.test(cmp)) return;
-    setLoadingAudit(true);
-    setAuditStatus("pending");
-    try {
-      const data = await getAudit(cmp);
-      const errs = data.erros || [];
-      setErros(errs);
-      setAuditStatus(errs.length === 0 ? "ok" : "error");
-    } catch (err) {
-      console.error(err);
-      setAuditStatus("error");
-    } finally {
-      setLoadingAudit(false);
-    }
-  }
+  const postBpa = usePostBpa();
+  const postApac = usePostApac();
 
-  async function handleExport(
-    tipo: "bpa" | "apac",
-    setUrl: (url: string | null) => void,
-    setLoading: (v: boolean) => void,
-  ) {
+  const auditStatus: AuditStatus = loadingAudit
+    ? "pending"
+    : auditData
+      ? auditData.erros.length === 0
+        ? "ok"
+        : "error"
+      : "pending";
+
+  const erros: AuditError[] = auditData?.erros || [];
+
+  async function handleExport(tipo: "bpa" | "apac", setUrl: (url: string | null) => void) {
     if (!competenciaValida) return;
-    setLoading(true);
     setPreview("");
+
+    const mutation = tipo === "bpa" ? postBpa : postApac;
     try {
-      const { url, preview } = tipo === "bpa" ? await postBpa(competencia) : await postApac(competencia);
-      let conteudo = preview;
+      const result = await mutation.mutateAsync(competencia);
+      let conteudo = result.preview;
       try {
-        conteudo = await fetchRemFile(url);
+        // Try to fetch full file
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+        const fullUrl = result.url.startsWith("http") ? result.url : `${apiBase}/${result.url.replace(/^\//, "")}`;
+        conteudo = await apiGet<string>(fullUrl);
       } catch {
         // fallback para preview parcial
       }
@@ -76,8 +68,6 @@ function AuditoriaContent() {
     } catch (err) {
       console.error(err);
       setUrl(null);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -87,12 +77,13 @@ function AuditoriaContent() {
         <h1 className="text-2xl">Auditoria & Exportação</h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card lg:col-span-1 space-y-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="card space-y-3 lg:col-span-1">
           <CompetenciaPicker value={competencia} onChange={setCompetencia} disabled={loadingAudit} />
           <button
-            className="px-4 py-2 bg-sky-600 rounded text-sm disabled:opacity-50"
-            onClick={() => runAudit(competencia)}
+            type="button"
+            className="rounded bg-sky-600 px-4 py-2 text-sm disabled:opacity-50"
+            onClick={() => refetchAudit()}
             disabled={!competenciaValida || loadingAudit}
           >
             {loadingAudit ? "Auditando..." : "Rodar auditoria"}
@@ -100,21 +91,23 @@ function AuditoriaContent() {
           <AuditoriaResultado status={auditStatus} erros={erros} />
         </div>
 
-        <div className="card lg:col-span-2 space-y-4">
+        <div className="card space-y-4 lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
             <button
-              className="px-4 py-2 bg-sky-500 rounded text-sm disabled:opacity-50"
-              onClick={() => handleExport("bpa", setDownloadUrlBpa, setLoadingBpa)}
-              disabled={auditStatus !== "ok" || loadingAudit || loadingBpa}
+              type="button"
+              className="rounded bg-sky-500 px-4 py-2 text-sm disabled:opacity-50"
+              onClick={() => handleExport("bpa", setDownloadUrlBpa)}
+              disabled={auditStatus !== "ok" || loadingAudit || postBpa.isPending}
             >
-              {loadingBpa ? "Gerando BPA..." : "Gerar BPA-I"}
+              {postBpa.isPending ? "Gerando BPA..." : "Gerar BPA-I"}
             </button>
             <button
-              className="px-4 py-2 bg-sky-700 rounded text-sm disabled:opacity-50"
-              onClick={() => handleExport("apac", setDownloadUrlApac, setLoadingApac)}
-              disabled={auditStatus !== "ok" || loadingAudit || loadingApac}
+              type="button"
+              className="rounded bg-sky-700 px-4 py-2 text-sm disabled:opacity-50"
+              onClick={() => handleExport("apac", setDownloadUrlApac)}
+              disabled={auditStatus !== "ok" || loadingAudit || postApac.isPending}
             >
-              {loadingApac ? "Gerando APAC..." : "Gerar APAC"}
+              {postApac.isPending ? "Gerando APAC..." : "Gerar APAC"}
             </button>
             {downloadUrlBpa && (
               <a
